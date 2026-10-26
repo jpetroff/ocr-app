@@ -1,0 +1,24 @@
+{
+  "name": "ocr-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "npm": "^11.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently --kill-others --names web,api \"npm:dev:web\" \"npm:dev:api\"",
+    "dev:web": "vite",
+    "dev:api": "cd .. && .venv/bin/python -m app serve --reload",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "concurrently": "^9.2.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

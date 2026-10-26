@@ -1,0 +1,21 @@
+{
+  "name": "ocr-web-app",
+  "version": "1.0.0",
+  "description": "Document OCR web app",
+  "homepage": "https://github.com/jpetroff/ocr-app#readme",
+  "bugs": {
+    "url": "https://github.com/jpetroff/ocr-app/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jpetroff/ocr-app.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

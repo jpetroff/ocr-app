@@ -1,3 +1,11 @@
+# Frontend dependencies and generated output
+node_modules/
+web/dist/
+*.tsbuildinfo
+
+.venv
+samples
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

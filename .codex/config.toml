@@ -1,0 +1,6 @@
+[mcp_servers.serena]
+url = "http://localhost:9121/mcp"
+
+[mcp_servers.chromium]
+command="bunx"
+args=["-y", "chrome-devtools-mcp@1.6.0", "--browser-url=http://127.0.0.1:9222"]

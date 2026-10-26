@@ -1,0 +1,4 @@
+ollama:
+  base_url: http://ollama.intranet
+  model: deepseek-ocr:3b
+  timeout_seconds: 360

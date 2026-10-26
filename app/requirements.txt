@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-multipart
+PyYAML
+ollama
+Pillow
+pillow-heif
+pypdfium2
