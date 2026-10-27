@@ -30,7 +30,7 @@ async def run_ocr(args, settings) -> int:
     settings = replace(settings, pipeline=replace(settings.pipeline, **overrides))
     async with create_pipeline(settings) as service:
         with args.file.open("rb") as file:
-            job = await service.submit(file, args.file.name)
+            job = await service.submit(file, args.file.name, save_raw=args.save_raw)
         try:
             async for event in service.events(job):
                 data_line = next((line[6:] for line in event.splitlines() if line.startswith("data: ")), None)
@@ -52,19 +52,28 @@ async def run_ocr(args, settings) -> int:
                         print(message, file=sys.stderr)
             if sys.stderr.isatty():
                 print(file=sys.stderr)
+            completed = job.result.directory if job.result and not job.error else None
+            raw_files = sorted(job.root.glob("raw-*.txt")) if args.save_raw else []
+            if completed or raw_files:
+                parent = args.output_path.resolve()
+                parent.mkdir(parents=True, exist_ok=True)
+                prefix = f"{Path(completed).name}-" if completed else "raw-"
+                directory = Path(tempfile.mkdtemp(prefix=prefix, dir=parent))
+                try:
+                    if completed:
+                        shutil.copytree(completed, directory, dirs_exist_ok=True)
+                    for raw in raw_files:
+                        page = int(raw.stem.removeprefix("raw-"))
+                        name = f"page-{page:04d}-raw.txt" if job.plan.is_pdf else "raw.txt"
+                        shutil.copyfile(raw, directory / name)
+                except BaseException:
+                    shutil.rmtree(directory, ignore_errors=True)
+                    raise
+                print(directory)
             if job.error:
                 raise job.error
-            if not job.result or not job.result.directory:
+            if not completed:
                 raise OCRError("OCR did not produce a document.")
-            parent = args.output_path.resolve()
-            parent.mkdir(parents=True, exist_ok=True)
-            directory = Path(tempfile.mkdtemp(prefix=f"{Path(job.result.directory).name}-", dir=parent))
-            try:
-                shutil.copytree(job.result.directory, directory, dirs_exist_ok=True)
-            except BaseException:
-                shutil.rmtree(directory, ignore_errors=True)
-                raise
-            print(directory)
             return 2 if job.status == "partial" else 0
         except asyncio.CancelledError:
             job.cancel_requested = True
@@ -77,7 +86,9 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     ocr = commands.add_parser("ocr", help="Recognize an image or PDF and export Markdown with image crops")
     ocr.add_argument("file", type=Path)
-    ocr.add_argument("--output-path", type=Path, default=Path.cwd(), help="Parent directory for a new document folder")
+    ocr.add_argument("--output-path", "--output", type=Path, default=Path.cwd(), help="Parent directory for a new document folder")
+    ocr.add_argument("--save-raw", action="store_true",
+                     help="Save raw LLM responses beside the output, even if post-processing fails")
     for option in ("pdf-dpi", "image-workers", "llm-workers", "postprocess-workers"):
         ocr.add_argument(f"--{option}", type=positive_int, default=None,
                          help="Override the corresponding pipeline setting")

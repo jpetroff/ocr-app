@@ -99,14 +99,56 @@ class AdapterTests(unittest.TestCase):
                     self.assertIn("archive completed", stderr.getvalue())
                     exported = Path(stdout.getvalue().strip())
                     self.assertEqual(exported.parent, Path(directory))
-                    self.assertEqual((exported / "document.md").read_bytes(), raw.encode("utf-8"))
+                    self.assertEqual((exported / "document.md").read_bytes(), raw.strip("\r\n").encode("utf-8"))
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.headers["content-type"], "application/zip")
                     self.assertIn("attachment; filename=", response.headers["content-disposition"])
                     with ZipFile(BytesIO(response.content)) as archive:
                         self.assertEqual(len(archive.namelist()), 1)
                         self.assertEqual(Path(archive.namelist()[0]).name, "document.md")
-                        self.assertEqual(archive.read(archive.namelist()[0]), raw.encode("utf-8"))
+                        self.assertEqual(archive.read(archive.namelist()[0]), raw.strip("\r\n").encode("utf-8"))
+
+    def test_cli_save_raw_preserves_exact_response_on_success_and_postprocess_failure(self):
+        responses = (
+            ("  # café\r\n\r\n\r\n", 0),
+            ("", 0),
+            ("image[[0,0,1000,999]]\r\nmalformed café\n", 1),
+        )
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root, "input.png")
+            source.write_bytes(encoded_image())
+            output = Path(root, "nested", "output")
+            for raw, expected_status in responses:
+                with self.subTest(raw=raw):
+                    stdout, stderr = StringIO(), StringIO()
+                    with patch.object(OllamaOCRClient, "recognize", return_value=raw):
+                        with redirect_stdout(stdout), redirect_stderr(stderr):
+                            status = main(["ocr", str(source), "--output", str(output), "--save-raw"])
+                    self.assertEqual(status, expected_status, stderr.getvalue())
+                    exported = Path(stdout.getvalue().strip())
+                    self.assertEqual(exported.parent, output)
+                    self.assertEqual((exported / "raw.txt").read_bytes(), raw.encode("utf-8"))
+                    self.assertEqual((exported / "document.md").exists(), expected_status == 0)
+                    if expected_status:
+                        self.assertIn("Error:", stderr.getvalue())
+                    self.assertEqual(
+                        {p.name for p in exported.iterdir()},
+                        {"raw.txt", "document.md"} if expected_status == 0 else {"raw.txt"},
+                    )
+
+    def test_cli_save_raw_backend_failure_does_not_create_output(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root, "input.png")
+            source.write_bytes(encoded_image())
+            output = Path(root, "output")
+            stdout, stderr = StringIO(), StringIO()
+            with patch.object(OllamaOCRClient, "recognize", side_effect=OCRBackendError("unavailable")):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    status = main(["ocr", str(source), "--output", str(output), "--save-raw"])
+            self.assertEqual(status, 1)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertFalse(output.exists())
+            self.assertIn("unavailable", stderr.getvalue())
 
     def test_cli_missing_file_and_invalid_image_have_no_success_output(self):
         with tempfile.TemporaryDirectory() as directory:

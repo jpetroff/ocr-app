@@ -107,8 +107,11 @@ Source: [app/export.py](../app/export.py), [app/api.py](../app/api.py),
 - `postprocess_page`: write per-page Markdown/crops; release inference raster and
   raw text after success. PDF crop names use `page-0001-image-001.png`; raster
   exports retain `image-001.png`. All paths in Markdown remain relative.
-- `assemble_document`: combine pages numerically, prefix each PDF page with
-  `<!-- Page N -->`, retain failed-page placeholders; UTF-8 `document.md` and
+- `assemble_document`: trim page-edge CR/LF; collapse 3+ consecutive newlines
+  to `"\n\n"` (LF or CRLF). Single line breaks and other whitespace remain.
+  Example: `"\nFirst\n\n\nSecond\n"` -> `"First\n\nSecond"`.
+  Combine pages numerically; separate PDF comments/content with `"\n\n"`,
+  including empty pages; retain failed-page placeholders. UTF-8 `document.md` and
   adjacent PNGs in one unique directory. `export_document` remains available as
   the single-image export helper.
 - CLI `--output-path` selects the parent, default cwd; stdout prints completed

@@ -108,10 +108,10 @@ class OllamaClientTests(unittest.TestCase):
             with TestClient(app) as client:
                 response = client.post("/api/ocr", files={"file": ("input.bmp", original)})
             exported = Path(stdout.getvalue().strip())
-            self.assertEqual((exported / "document.md").read_bytes(), raw.encode())
+            self.assertEqual((exported / "document.md").read_bytes(), raw.strip("\r\n").encode())
             self.assertEqual(response.status_code, 200)
             with ZipFile(BytesIO(response.content)) as archive:
-                self.assertEqual(archive.read(archive.namelist()[0]), raw.encode())
+                self.assertEqual(archive.read(archive.namelist()[0]), raw.strip("\r\n").encode())
 
 
 if __name__ == "__main__":

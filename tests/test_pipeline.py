@@ -23,7 +23,8 @@ from app.api import app, JobZipResponse, stream_ocr
 from app.config import ConfigError, OllamaSettings, PipelineSettings, load_settings
 from app.errors import OCRBackendError, OCRInputError
 from app.ollama_client import OllamaOCRClient
-from app.pipeline import (Job, Pipeline, inspect_input, postprocess_page, prepare_page)
+from app.pipeline import (Job, PageResult, Pipeline, assemble_document, inspect_input,
+                          postprocess_page, prepare_page)
 from test_processing import encoded_image
 
 
@@ -43,6 +44,27 @@ def parse_events(body):
 
 
 class PDFWorkerTests(unittest.TestCase):
+    def test_assembly_removes_redundant_newlines(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root, "page.md")
+            source.write_bytes(b"\n\n  First  \nline\n\n\n\n![Image](crop.png)\r\n\r\n\r\nLast\n\n")
+            Path(root, "crop.png").write_bytes(b"crop")
+            empty = Path(root, "empty.md")
+            empty.write_text("\n\n\n")
+            page = PageResult(1, str(source), ["crop.png"])
+            expected = "  First  \nline\n\n![Image](crop.png)\n\nLast"
+            image = Path(assemble_document(root, "image.png", False, [page]))
+            self.assertEqual((image / "document.md").read_text(), expected)
+            pdf = Path(assemble_document(root, "book.pdf", True, [
+                PageResult(4, error="offline", failed_stage="llm"),
+                PageResult(3, str(empty)), PageResult(2, str(source)), page,
+            ]))
+            self.assertEqual((pdf / "document.md").read_text(),
+                f"<!-- Page 1 -->\n\n{expected}\n\n<!-- Page 2 -->\n\n{expected}"
+                "\n\n<!-- Page 3 -->\n\n<!-- Page 4 -->\n\n"
+                "> OCR failed for this page during llm: offline")
+            self.assertEqual((pdf / "crop.png").read_bytes(), b"crop")
+
     def test_page_dimensions_dpi_rotation_and_blank_white_background(self):
         with tempfile.TemporaryDirectory() as root:
             source = Path(root, "input")
@@ -425,6 +447,36 @@ class APIAndCLITests(unittest.TestCase):
             for value in ("0", "-1", "abc"):
                 self.assertEqual(client.post("/api/ocr/stream", files={"file": ("a.pdf", pdf_bytes(1))},
                                              data={"pdf_dpi": value}).status_code, 422)
+
+    def test_cli_save_raw_pdf_includes_failed_pages_and_uses_one_output_directory(self):
+        valid = "  page café\r\n\r\n"
+        malformed = "image[[0,0,1000,999]]\n"
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root, "book.pdf")
+            source.write_bytes(pdf_bytes())
+            output = Path(root, "output")
+            for responses, expected_status in (
+                ([valid, malformed, valid], 2),
+                ([malformed] * 3, 1),
+            ):
+                with self.subTest(status=expected_status):
+                    stdout, stderr = StringIO(), StringIO()
+                    with patch.object(OllamaOCRClient, "recognize", side_effect=responses):
+                        with redirect_stdout(stdout), redirect_stderr(stderr):
+                            status = main(["ocr", str(source), "--output", str(output), "--save-raw",
+                                           "--pdf-dpi", "72", "--llm-workers", "1"])
+                    self.assertEqual(status, expected_status, stderr.getvalue())
+                    self.assertEqual(len(stdout.getvalue().splitlines()), 1)
+                    exported = Path(stdout.getvalue().strip())
+                    self.assertEqual(exported.parent, output)
+                    for page, raw in enumerate(responses, 1):
+                        self.assertEqual(
+                            (exported / f"page-{page:04d}-raw.txt").read_bytes(), raw.encode("utf-8"))
+                    self.assertEqual((exported / "document.md").exists(), expected_status == 2)
+                    if expected_status == 2:
+                        markdown = (exported / "document.md").read_text()
+                        self.assertIn("during postprocess", markdown)
+                        self.assertEqual(markdown.count("<!-- Page "), 3)
 
     def test_cli_partial_exit_and_worker_overrides(self):
         counter = 0

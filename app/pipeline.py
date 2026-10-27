@@ -107,7 +107,7 @@ def prepare_page(source: str, root: str, page: int, dpi: int, is_pdf: bool) -> s
     return str(destination)
 
 
-def postprocess_page(root: str, page: int, is_pdf: bool) -> PageResult:
+def postprocess_page(root: str, page: int, is_pdf: bool, save_raw: bool = False) -> PageResult:
     workspace = Path(root)
     image = workspace / f"prepared-{page}.png"
     with (workspace / f"raw-{page}.txt").open(encoding="utf-8", newline="") as raw:
@@ -124,7 +124,8 @@ def postprocess_page(root: str, page: int, is_pdf: bool) -> PageResult:
     markdown = directory / "page.md"
     markdown.write_text(render_markdown(document), encoding="utf-8")
     image.unlink(missing_ok=True)
-    (workspace / f"raw-{page}.txt").unlink(missing_ok=True)
+    if not save_raw:
+        (workspace / f"raw-{page}.txt").unlink(missing_ok=True)
     return PageResult(page, str(markdown), images)
 
 
@@ -139,16 +140,20 @@ def assemble_document(root: str, filename: str, is_pdf: bool, pages: list[PageRe
                 if is_pdf:
                     if index:
                         output.write("\n\n")
-                    output.write(f"<!-- Page {page.page} -->\n\n")
+                    output.write(f"<!-- Page {page.page} -->")
                 if page.error:
                     # Keep errors on one quoted line; do not inject model/exception markup.
                     message = " ".join(page.error.split())
-                    output.write(f"> OCR failed for this page during {page.failed_stage}: {message}")
+                    markdown = f"> OCR failed for this page during {page.failed_stage}: {message}"
                 else:
                     with open(page.markdown, encoding="utf-8", newline="") as content:
-                        shutil.copyfileobj(content, output)
+                        markdown = re.sub(r"(?:\r?\n){3,}", "\n\n", content.read().strip("\r\n"))
                     for name in page.images:
                         shutil.copyfile(Path(page.markdown).parent / name, directory / name)
+                if markdown:
+                    if is_pdf:
+                        output.write("\n\n")
+                    output.write(markdown)
         return str(directory)
     except BaseException:
         shutil.rmtree(directory)
@@ -156,12 +161,13 @@ def assemble_document(root: str, filename: str, is_pdf: bool, pages: list[PageRe
 
 
 class Job:
-    def __init__(self, workspace, filename, dpi):
+    def __init__(self, workspace, filename, dpi, save_raw=False):
         self.id = uuid4().hex
         self.workspace = workspace
         self.root = Path(workspace.name)
         self.filename = filename
         self.dpi = dpi
+        self.save_raw = save_raw
         self.plan = JobPlan({"inspect": TaskRecord("inspect", "image")})
         self.pages: dict[int, PageResult] = {}
         self.status = "running"
@@ -232,7 +238,7 @@ class Pipeline:
         self.cursor = {stage: None for stage in self.limits}
         self.runner = asyncio.create_task(self._run())
 
-    async def submit(self, file, filename, dpi=None) -> Job:
+    async def submit(self, file, filename, dpi=None, *, save_raw=False) -> Job:
         if not self.accepting:
             raise RuntimeError("OCR service is shutting down.")
         dpi = self.settings.pipeline.pdf_dpi if dpi is None else dpi
@@ -250,7 +256,7 @@ class Pipeline:
                 raise
             if not self.accepting:
                 raise RuntimeError("OCR service is shutting down.")
-            job = Job(workspace, filename, dpi)
+            job = Job(workspace, filename, dpi, save_raw=save_raw)
             self.jobs[job.id] = job
             job.emit("job.accepted")
             self.wake.set()
@@ -363,7 +369,7 @@ class Pipeline:
             return prepare_page, (str(job.root / "input"), root, task.page, job.dpi, job.plan.is_pdf)
         if task.stage == "llm":
             return self._recognize, (root, task.page)
-        return postprocess_page, (root, task.page, job.plan.is_pdf)
+        return postprocess_page, (root, task.page, job.plan.is_pdf, job.save_raw)
 
     async def _execute(self, job, task):
         try:
@@ -393,7 +399,8 @@ class Pipeline:
                         self._transition(job, downstream, "skipped")
                 try:
                     (job.root / f"prepared-{task.page}.png").unlink(missing_ok=True)
-                    (job.root / f"raw-{task.page}.txt").unlink(missing_ok=True)
+                    if not job.save_raw:
+                        (job.root / f"raw-{task.page}.txt").unlink(missing_ok=True)
                 except OSError as cleanup_error:
                     job.error = cleanup_error
                 job.emit("page.completed", page=asdict(job.pages[task.page]))
