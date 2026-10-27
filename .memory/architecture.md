@@ -1,143 +1,163 @@
-# OCR application architecture
+# OCR implementation
 
-## Status and boundaries
+Focused walkthrough: [LLM output processing](llm-output-processing.md).
 
-The application is a runnable Python skeleton with CLI and FastAPI adapters
-around one shared synchronous OCR service. The TypeScript web app uses Vite.
-Image/PDF conversion and Ollama inference are explicit stubs; no OCR text is
-currently produced. Queues, persistence, and an upload UI remain deferred.
-
-## Modules and data flow
-
-All Python application modules belong to the importable `app` package.
-
-| Module | Responsibility |
-| --- | --- |
-| `__main__` | Parse `ocr FILE` and `serve [--reload]` with standard-library argparse. |
-| `config` | Read YAML, validate settings, and return immutable `OllamaSettings`. |
-| `service` | Own the shared OCR orchestration, result dataclasses, and client lifecycle. |
-| `processing` | Define numbered PNG pages and the conversion stub. |
-| `ollama_client` | Construct the configured Ollama client and expose the inference stub. |
-| `api` | Define the FastAPI lifespan, service dependency, and HTTP routes. |
-| `errors` | Define `OCRNotImplementedError` for both adapters. |
+## Entry points and data flow
 
 ```text
-CLI: file opened in binary mode ─┐
-                               ├─> OCRService.ocr(file, filename)
-API: UploadFile.file ───────────┘       │
-                                       ├─> iter_pages(file, filename) [stub]
-                                       │      yields ImagePage(page_number, png_bytes)
-                                       ├─> client.recognize(png_bytes) [stub]
-                                       │      called sequentially for each page
-                                       └─> OCRResult(pages=[OCRPage(page_number, text), ...])
+python -m app ocr FILE [--output-path DIRECTORY] ─┐
+POST /api/ocr (file) ────────────────────────────┴─> OCRService.ocr -> OCRDocument
+                              |
+                              prepare_image(file, filename)
+                                ├─ validated PNG/JPEG/WebP -> original bytes
+                                └─ normalization needed -> convert_image -> RGB PNG
+                              |
+                              OllamaOCRClient.recognize(image_bytes)
+                              |  generate(model=settings.model,
+                              |           prompt="<|grounding|>Convert the document to markdown.",
+                              |           images=[image_bytes], stream=False)
+                              |
+                              response.response (raw text)
+                              |
+                              app.document.build_document(text, image_bytes)
+                              |  parse_document -> blocks + boxes
+                              |  exact image labels -> PNG crop bytes
+                              |
+                              app.export.export_document(document, parent, filename)
+                                ├─ CLI: new directory; print absolute path
+                                └─ API: /tmp workspace -> archive_document -> TemporaryZipResponse
 ```
 
-The shared entry point is `OCRService.ocr(file: BinaryIO, filename: str) -> OCRResult`.
-Page numbers are one-based; results preserve source order. The intended success
-output is JSON with a `pages` array containing `page_number` and `text`. The CLI
-serializes dataclasses; FastAPI uses `OCRResult` as its response model.
+Raw text remains the Ollama client contract. Service/adapters return structured
+documents and exports; no raw-output compatibility mode.
 
-Currently, `iter_pages` immediately raises `OCRNotImplementedError`, so inference
-is never reached. `recognize` independently raises the same error if called.
-The adapters expose these failures as CLI stderr plus exit code 1, or HTTP 501
-with a JSON `detail` message. Missing CLI files also fail with exit code 1.
+## Block document and grounding
 
-## Configuration and lifecycle
+Entry points: app.document.parse_document, build_document.
 
-The repository-root `config.yaml` is the only application configuration file.
-Its location is resolved from `config.py`, independently of the working directory.
-Use the file's current values as authoritative; its Ollama instance, model tag,
-and timeout are user-editable and must not be reset to example values.
-
-Required settings are:
-
-| Key | Validation |
-| --- | --- |
-| `ollama.base_url` | HTTP or HTTPS URL with a hostname and valid optional port. |
-| `ollama.model` | Non-empty string, normally a `deepseek-ocr` model tag. |
-| `ollama.timeout_seconds` | Finite positive number; booleans are rejected. |
-
-`yaml.safe_load` reads the configuration. Missing, malformed, or invalid settings
-raise `ConfigError`; there are no implicit configuration defaults or environment
-overrides. The CLI validates settings before running either command. FastAPI
-loads them during startup.
-
-`create_service(settings)` constructs one Ollama adapter and closes its client
-in a `finally` block. CLI OCR uses this context for one invocation. FastAPI uses
-it for the application lifespan and stores the service in `app.state.ocr_service`.
-Client construction makes no Ollama requests or model downloads, so server
-startup and health checks work without a reachable Ollama instance.
-
-## HTTP and development startup
-
-| Endpoint | Behavior |
-| --- | --- |
-| `GET /api/health` | Returns `{"status":"ok"}` for application liveness only. |
-| `POST /api/ocr` | Accepts one multipart field named `file`; currently returns HTTP 501. |
-| `GET /docs` | FastAPI's interactive API documentation. |
-
-The OCR route is synchronous: FastAPI runs it in its thread pool, keeping future
-blocking conversion and inference off the event loop. Missing upload fields
-receive FastAPI's HTTP 422 validation response.
-
-From the repository root:
-
-```sh
-uv pip install --python .venv/bin/python -r app/requirements.txt
-npm --prefix web install
-
-.venv/bin/python -m app ocr samples/document.pdf
-.venv/bin/python -m app serve --reload
-
-# Start both frontend and backend instead:
-npm run dev
+```text
+OCRDocument(width, height, blocks: list[OCRBlock])
+  OCRBlock(label, bounding_boxes, content, images)
+    BoundingBox(normalized=(x1,y1,x2,y2), pixels=(left,top,right,bottom))
+    BlockImage(bounding_box_index, filename, data: bytes)
 ```
 
-Use an existing input file for the CLI. The server command invokes Uvicorn with
-`app.api:app` on `127.0.0.1:8000`. Reload is opt-in and watches the Python package.
+- Parse line-start `label[[x1,y1,x2,y2], ...]` and native
+  `<|ref|>label<|/ref|><|det|>[[x1,y1,x2,y2], ...]<|/det|>`.
+- JSON coordinate arrays only; four integers per box, 0–999, x1 < x2, y1 < y2.
+- Pixels: `int(x / 999 * width)`, `int(y / 999 * height)`.
+- Preserve block order, unknown labels, following content verbatim, Markdown,
+  HTML captions, Unicode, and empty image blocks. Ungrounded text -> text block;
+  empty output -> empty blocks.
+- Only exact `image` labels produce crops. Decode the prepared inference image
+  once for extraction; encode each crop as PNG bytes. Close source/crop objects.
+- EXIF orientation and normalization precede inference and cropping.
+- Malformed grounding/coordinates or empty image pixel crops -> OCROutputError.
+- No base64 images in OCRDocument; no retained source raster or duplicate raw text.
 
-The root npm `dev` script delegates to the web package. Inside `web`, `dev` uses
-`concurrently --kill-others` to run `dev:web` (Vite) and `dev:api` (the Python
-server with reload). Running `npm run dev` from either directory starts both.
-Ctrl+C or either child exiting stops the other server and the reload child.
+## Export layout and ownership
 
-The existing Vite configuration proxies `/api` to `http://127.0.0.1:8000` without
-rewriting paths and restricts served files to `web/`. The backend starts
-separately when previewing the frontend production build in `web/dist/`.
+Entry points: app.export.render_markdown, export_document, archive_document;
+app.api.TemporaryZipResponse.
 
-## Future conversion and inference contracts
+```text
+<safe-input-stem>-<unique-suffix>/
+  document.md
+  image-001.png
+  image-002.png
+```
 
-- Pillow decodes common raster images; pillow-heif adds HEIC/HEIF. Actual format
-  coverage depends on installed decoders. Unsupported files must fail clearly;
-  SVG and camera RAW are excluded.
-- Correct EXIF orientation, flatten transparency onto white, and encode RGB PNG.
-  Process every TIFF page, but only the first frame of animated images.
-- pypdfium2 renders PDF pages sequentially at 200 DPI. Yield pages individually
-  and promptly close bitmap, page, and document resources. Protect all PDFium
-  calls across requests with a process-wide lock because PDFium is not thread-safe.
-- Send one PNG per Ollama request with the configured model, prompt `Free OCR.`,
-  and streaming disabled. Preserve page order. DeepSeek-OCR requires Ollama
-  0.13.0 or later and a model provisioned on the configured instance.
+- `export_document` creates the parent and a unique child with `mkdtemp`;
+  sanitize filenames to an ASCII stem, default `document`, at most 80 characters.
+- Image numbering follows block/box order. Markdown uses `![Image](image-001.png)`;
+  preserve following content and separate pieces with blank lines. Captions stay
+  separate; boxes remain internal. Plain-text-only exports preserve exact text.
+- Remove incomplete child directories on any export failure; never overwrite.
+- CLI `--output-path` means parent directory; default cwd. Success prints the
+  completed child's absolute path plus newline.
+- API accepts only multipart `file`. Create a private `/tmp/ocr-*` workspace,
+  export a document child, ZIP files under that single directory, send attachment
+  `application/zip`. Archive creation/response use disk files, not a ZIP byte buffer.
+- Response owns TemporaryDirectory. Cleanup in `finally` after success, send
+  failure, disconnect, or cancellation; generation failure cleans up immediately.
+- Disable response `pathsend`: send file chunks before deleting the workspace.
 
-These contracts are documented beside the stubs; conversion, PDFium locking,
-and network inference have not yet been implemented.
+## Image processing
 
-## Dependencies and verification
+Entry points: app.processing.prepare_image, convert_image, _open_image.
 
-Use uv with the existing Python 3.13 `.venv`. Keep Python dependencies exclusively
-in `app/requirements.txt`: FastAPI, Uvicorn with standard extras,
-python-multipart, PyYAML, ollama, Pillow, pillow-heif, and pypdfium2. Do not add
-Python project manifests, lockfiles, or additional configuration files.
-Web dependencies use the existing web package manifest and npm lockfile.
-Development requires Node.js 20.19+ (20.x) or 22.12+ and npm 11.x on PATH.
+| Condition | Behavior |
+| --- | --- |
+| PNG/JPEG/WebP, RGB or L, no transparency, orientation 1 | Preserve original bytes. |
+| BMP/GIF/TIFF/HEIF/AVIF or normalization required | Decode using installed Pillow codecs; EXIF transpose; alpha over white; RGB PNG. |
+| Empty, invalid, truncated, unsupported format | OCRInputError. |
+| Multiple frames/pages | OCRInputError; supply one image. |
+
+Inspect decoded content, independent of filename or upload content type.
+Read BinaryIO from its current position; caller retains stream ownership.
+Register pillow-heif once with thumbnails disabled. Close decoded images.
+PDF, SVG, camera RAW, and multi-page processing remain outside this contract.
+
+## Ollama and lifecycle
+
+- app.config.load_settings reads repository-root config.yaml independently of cwd.
+- Preserve configured base_url, model tag, and timeout_seconds; no implicit defaults.
+- Current model tag: deepseek-ocr:3b.
+- create_service owns and closes the SDK client, including on failures.
+- Client construction, API startup, and GET /api/health make no Ollama requests.
+- SDK handles base64 encoding; one generate request per image.
+- No automatic model downloads or retries. SDK output stays raw; service parses it.
+- HTTP/connection/server errors -> OCRBackendError.
+- HTTP transport timeout -> OCRTimeoutError.
+- Invalid response or missing generated text -> OCRBackendError.
+- The synchronous OCR endpoint runs in FastAPI's thread pool.
+
+## Adapter behavior
+
+| Outcome | CLI | POST /api/ocr |
+| --- | --- | --- |
+| Success | Export directory path; exit 0 | 200, application/zip attachment |
+| Invalid input | stderr; exit 1 | 400, JSON detail |
+| Backend failure | stderr; exit 1 | 502, JSON detail |
+| Invalid OCR grounding/crop | stderr; exit 1 | 502, JSON detail |
+| Backend timeout | stderr; exit 1 | 504, JSON detail |
+| Filesystem/export failure | stderr; exit 1 | 500, JSON detail |
+| Missing multipart file | N/A | 422 |
+
+CLI entry: app.__main__.main. API entries: app.api.ocr and lifespan.
+GET /api/health returns {"status":"ok"}; /docs exposes OpenAPI.
+ConfigError prevents invalid CLI invocation/API startup.
+
+## Verification
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
-npm --prefix web run typecheck
-npm --prefix web run build
+.venv/bin/python -m app ocr samples/test-ebook-simple-page.png --output-path /tmp/ocr-output
+curl -F 'file=@samples/test-ebook-simple-page.png' http://127.0.0.1:8000/api/ocr -o /tmp/ocr-result.zip
 ```
 
-The Python tests cover configuration validation and path resolution, ordered
-service calls, client cleanup, explicit stubs, CLI failures, API responses, and
-invalid startup configuration. Live development startup, proxy requests, and
-shutdown after Ctrl+C or either server exiting were verified during bootstrap.
+45 tests pass without live Ollama:
+- tests/test_processing.py: format detection, pass-through, fallback formats,
+  HEIF, alpha/palette transparency, EXIF, invalid and multi-frame input.
+- tests/test_ollama_client.py: actual SDK over httpx.MockTransport; base64,
+  configured model/timeout, nonstreaming request, raw/empty text, upstream errors,
+  CLI/API through conversion and SDK.
+- tests/test_app.py: service calls, lifecycle, config, adapter output and errors.
+- tests/test_document.py: six-block double_drawer fixture, native/simplified/mixed
+  markers, multiple boxes, unknown labels, empty/plain text, invalid grounding,
+  binary crops, non-square pixel scaling, boundary pixels, EXIF-aligned crops.
+- tests/test_export.py: safe unique directories, identical CLI/ZIP files,
+  relative references, OpenAPI ZIP content, failed-write cleanup, HTTP 500,
+  workspace lifetime, failed/cancelled transmission, ASGI disconnect cleanup.
+
+No dependencies added; existing app/requirements.txt remains authoritative.
+Existing Starlette TestClient emits an httpx deprecation warning.
+
+## References
+
+- [Ollama Python](https://github.com/ollama/ollama-python): generate and SDK errors.
+- [Ollama vision](https://docs.ollama.com/capabilities/vision): byte input and SDK encoding.
+- [DeepSeek-OCR](https://ollama.com/library/deepseek-ocr): model and prompt.
+- [DeepSeek reference extraction](https://huggingface.co/deepseek-ai/DeepSeek-OCR/blob/main/modeling_deepseekocr.py): 0–999 grounding coordinates.
+- [Pillow EXIF transpose](https://pillow.readthedocs.io/en/stable/reference/ImageOps.html#PIL.ImageOps.exif_transpose).
+- [HEIF plugin registration](https://pillow-heif.readthedocs.io/en/latest/pillow-plugin.html).

@@ -1,8 +1,8 @@
 # ocr-app
 
-Document OCR application skeleton with a Python CLI, FastAPI backend, and
-TypeScript/Vite frontend. Image/PDF conversion and Ollama inference are explicit
-stubs: OCR currently fails with a clear message (CLI exit 1 or HTTP 501).
+Single-image OCR with a Python CLI, FastAPI backend, and TypeScript/Vite
+frontend. The backend sends images to the configured Ollama DeepSeek-OCR model
+and returns raw generated text. PDF and multi-frame inputs are deferred.
 
 ## Install and run
 
@@ -25,57 +25,48 @@ Run the CLI or backend independently from the repository root:
 
 ```sh
 .venv/bin/python -m app --help
-.venv/bin/python -m app ocr samples/document.pdf
+.venv/bin/python -m app ocr samples/test-ebook-simple-page.png
 .venv/bin/python -m app serve --reload
 ```
 
 Replace the sample path with an existing file. Omit `--reload` to disable
-source reload. Successful OCR will eventually print JSON containing an ordered
-`pages` list with `page_number` (one-based) and `text`.
+source reload. Successful OCR writes raw model text to stdout, preserving
+whitespace and adding no newline. The API returns the same text as `text/plain`.
 
 ## Configuration and HTTP API
 
 Edit the existing `config.yaml` to set `ollama.base_url`, `ollama.model`, and
-`ollama.timeout_seconds`. Defaults are `http://localhost:11434`, `deepseek-ocr`,
-and 120 seconds. The config path is resolved relative to the Python package,
+`ollama.timeout_seconds`. All settings are required; there are no implicit
+defaults. The config path is resolved relative to the Python package,
 not the working directory. Invalid settings fail at CLI invocation or API startup.
 The configured Ollama client is created without making a network request.
 
 - `GET /api/health` returns `{"status":"ok"}` without checking Ollama.
-- `POST /api/ocr` accepts one multipart field named `file` and currently returns
-  HTTP 501 with an explicit conversion-not-implemented message.
+- `POST /api/ocr` accepts one multipart field named `file` and returns raw
+  generated text as UTF-8 `text/plain`.
+- Invalid images return HTTP 400; Ollama failures return 502; timeouts return 504.
 - Interactive API documentation is available at `/docs` on the backend.
 
 ```sh
 curl http://127.0.0.1:8000/api/health
-curl -F 'file=@samples/document.pdf' http://127.0.0.1:8000/api/ocr
+curl -F 'file=@samples/test-ebook-simple-page.png' http://127.0.0.1:8000/api/ocr
 ```
 
-## Architecture and planned processing
+## Architecture and processing
 
-`app` is an importable package. `__main__` and `api` adapt CLI arguments and
-HTTP uploads to the same synchronous `OCRService.ocr(file, filename)` method.
-`config` loads settings; `processing.iter_pages` and
-`ollama_client.OllamaOCRClient.recognize` are the conversion and inference stubs.
-The service preserves page order, and client resources are closed at shutdown.
+`OCRService.ocr(file, filename) -> str` is shared by CLI and API.
+`processing.prepare_image` validates content and preserves supported PNG/JPEG/WebP
+bytes when normalization is unnecessary. `processing.convert_image` converts
+other supported raster images to RGB PNG, applies EXIF orientation, and flattens
+transparency onto white. Multi-frame images are rejected.
 
-The future conversion contract is:
+`ollama_client.OllamaOCRClient.recognize` sends one image with prompt `Free OCR.`
+and streaming disabled. Output whitespace, Unicode, and markup are preserved.
+Client resources are closed at shutdown.
 
-- Pillow handles common raster formats (including JPEG, PNG, WebP, GIF, BMP,
-  and TIFF); pillow-heif adds HEIC/HEIF. Support depends on installed decoders;
-  unsupported inputs must fail clearly. SVG and camera RAW are excluded.
-- Correct EXIF orientation, flatten transparency onto white, and encode RGB PNG.
-  Process every TIFF page and the first frame of animated images.
-- pypdfium2 renders PDF pages sequentially at 200 DPI and releases page resources
-  promptly. All PDFium calls must share a process-wide lock because
-  [PDFium is not thread-safe](https://pypdfium2.readthedocs.io/en/stable/python_api.html).
-- Send one PNG per Ollama request using `deepseek-ocr`, prompt `Free OCR.`, and
-  streaming disabled. [DeepSeek-OCR requires Ollama 0.13.0 or later](https://ollama.com/library/deepseek-ocr).
-  Provision the model on the configured Ollama instance before implementing inference.
-
-Conversion, inference, queues, persistence, and upload UI remain deferred.
-Python dependencies live only in `app/requirements.txt`; no additional Python
-configuration or lockfiles are used.
+Implementation contracts and verification are in
+[.memory/architecture.md](.memory/architecture.md). Python dependencies live only
+in `app/requirements.txt`.
 
 ## Checks and frontend build
 

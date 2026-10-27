@@ -1,0 +1,20 @@
+sub_title[[94, 46, 355, 70]]
+## Mobile: Double Drawer  
+
+text[[92, 76, 856, 199]]
+Pioneered by Facebook and Path mobile apps, drawers that are exposed by swiping the main content view to the right (to expose the left drawer) or left (to expose the right drawer) are now common in many mobile apps 
+on iOS and Android (see Figure 7- 2). The left drawer typically contains primary navigation for the mobile app. The right drawer, when it exists, typically is used for access to an ancillary list of objects (such as 
+friends in the case of Facebook).  
+
+image[[94, 220, 849, 579]]
+image_caption[[92, 586, 840, 654]]
+<center>Figure 7-2: Facebook's Double Drawer is another structural pattern that has become nearly as ubiquitous for mobile apps as the Organizer-Workspace pattern has for desktop apps. The drawer on the left 
+provides navigation and drives the app's content view. The pane on the right is used for rapid global access to a list of ancillary objects—in this case, your Facebook friends. </center>  
+
+text[[92, 677, 856, 799]]
+Like the Organizer- Workspace pattern, the Double Drawer is almost perfectly optimized for its context—in this case, mobile rather than desktop. Swiping across the main content pane to reveal lists of navigation or 
+communications options is a simple gross motor action, ideal for one- handed use. Selecting from the open drawers is similarly easy to do with the thumb, and the animated opening and shutting of the drawers is 
+aesthetically satisfying as well. It's no wonder this pattern has been so quickly and widely adopted.  
+
+text[[93, 831, 209, 866]]
+Notes  1. Tidwell, 2006

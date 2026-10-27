@@ -1,5 +1,21 @@
 """Errors shared by the OCR service and its adapters."""
 
 
-class OCRNotImplementedError(NotImplementedError):
-    """Raised while a processing or inference stage is still a stub."""
+class OCRError(Exception):
+    """An expected OCR failure suitable for a concise adapter response."""
+
+
+class OCRInputError(OCRError):
+    """The input cannot be processed as one supported image."""
+
+
+class OCRBackendError(OCRError):
+    """Ollama is unavailable or failed to return generated text."""
+
+
+class OCRTimeoutError(OCRBackendError):
+    """Ollama did not respond within the configured timeout."""
+
+
+class OCROutputError(OCRBackendError):
+    """Generated grounding is malformed or cannot describe a usable crop."""
