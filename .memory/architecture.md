@@ -1,163 +1,92 @@
-# OCR implementation
+# OCR architecture
 
-Focused walkthrough: [LLM output processing](llm-output-processing.md).
+Entry points: `app.service.create_pipeline`, `app.__main__.run_ocr`,
+`app.api.lifespan`, `app.api.ocr`, `app.api.stream_ocr`.
 
-## Entry points and data flow
-
-```text
-python -m app ocr FILE [--output-path DIRECTORY] ─┐
-POST /api/ocr (file) ────────────────────────────┴─> OCRService.ocr -> OCRDocument
-                              |
-                              prepare_image(file, filename)
-                                ├─ validated PNG/JPEG/WebP -> original bytes
-                                └─ normalization needed -> convert_image -> RGB PNG
-                              |
-                              OllamaOCRClient.recognize(image_bytes)
-                              |  generate(model=settings.model,
-                              |           prompt="<|grounding|>Convert the document to markdown.",
-                              |           images=[image_bytes], stream=False)
-                              |
-                              response.response (raw text)
-                              |
-                              app.document.build_document(text, image_bytes)
-                              |  parse_document -> blocks + boxes
-                              |  exact image labels -> PNG crop bytes
-                              |
-                              app.export.export_document(document, parent, filename)
-                                ├─ CLI: new directory; print absolute path
-                                └─ API: /tmp workspace -> archive_document -> TemporaryZipResponse
-```
-
-Raw text remains the Ollama client contract. Service/adapters return structured
-documents and exports; no raw-output compatibility mode.
-
-## Block document and grounding
-
-Entry points: app.document.parse_document, build_document.
+## Processing
 
 ```text
-OCRDocument(width, height, blocks: list[OCRBlock])
-  OCRBlock(label, bounding_boxes, content, images)
-    BoundingBox(normalized=(x1,y1,x2,y2), pixels=(left,top,right,bottom))
-    BlockImage(bounding_box_index, filename, data: bytes)
+CLI file / API upload
+  -> Pipeline.submit: job-owned disk copy
+  -> inspect_input: content detection + page count / raster validation
+  -> page-N:image       prepare_page, PDF render or normalized raster
+  -> page-N:llm         OllamaOCRClient.recognize, one request/page
+  -> page-N:postprocess build_document + render_markdown + PNG crops
+  -> assemble_document: ordered document.md + adjacent crops
+  -> archive_document: disk-backed ZIP
 ```
 
-- Parse line-start `label[[x1,y1,x2,y2], ...]` and native
-  `<|ref|>label<|/ref|><|det|>[[x1,y1,x2,y2], ...]<|/det|>`.
-- JSON coordinate arrays only; four integers per box, 0–999, x1 < x2, y1 < y2.
-- Pixels: `int(x / 999 * width)`, `int(y / 999 * height)`.
-- Preserve block order, unknown labels, following content verbatim, Markdown,
-  HTML captions, Unicode, and empty image blocks. Ungrounded text -> text block;
-  empty output -> empty blocks.
-- Only exact `image` labels produce crops. Decode the prepared inference image
-  once for extraction; encode each crop as PNG bytes. Close source/crop objects.
-- EXIF orientation and normalization precede inference and cropping.
-- Malformed grounding/coordinates or empty image pixel crops -> OCROutputError.
-- No base64 images in OCRDocument; no retained source raster or duplicate raw text.
+- Shared asyncio coordinator; ready pages advance independently.
+- Defaults: 300 DPI; 4 image processes, 1 LLM thread, 4 postprocess processes.
+  PDFium runs in spawned processes; LLM clients belong to executor threads.
+- `PipelineSettings` in `app.config`; optional `pipeline` config mapping.
+  CLI overrides all pipeline settings; multipart `pdf_dpi` overrides resolution.
+- Per-stage ready+running <= 2*workers; round-robin admission across jobs.
+  Global in-flight page window: 2*sum(worker counts).
+- PDF output: `<!-- Page N -->`, source page order, unique
+  `page-0001-image-001.png` crops. Raster formatting/names stay compatible.
+- Expected page errors -> placeholders, skip dependent tasks, continue remaining
+  pages. Partial success publishes output; all-page or infrastructure failure does not.
+- Single-image helpers remain: `OCRService.ocr -> OCRDocument`,
+  `prepare_image`, `convert_image`, `export_document`.
 
-## Export layout and ownership
+Detailed task states, scheduling and ownership:
+[PDF pipeline](pdf-pipeline.md). Grounding/parser/crop contracts:
+[LLM output processing](llm-output-processing.md).
+Wire responses and client parsing: [API event examples](api-events.md).
 
-Entry points: app.export.render_markdown, export_document, archive_document;
-app.api.TemporaryZipResponse.
+## Interfaces and lifetime
 
-```text
-<safe-input-stem>-<unique-suffix>/
-  document.md
-  image-001.png
-  image-002.png
-```
-
-- `export_document` creates the parent and a unique child with `mkdtemp`;
-  sanitize filenames to an ASCII stem, default `document`, at most 80 characters.
-- Image numbering follows block/box order. Markdown uses `![Image](image-001.png)`;
-  preserve following content and separate pieces with blank lines. Captions stay
-  separate; boxes remain internal. Plain-text-only exports preserve exact text.
-- Remove incomplete child directories on any export failure; never overwrite.
-- CLI `--output-path` means parent directory; default cwd. Success prints the
-  completed child's absolute path plus newline.
-- API accepts only multipart `file`. Create a private `/tmp/ocr-*` workspace,
-  export a document child, ZIP files under that single directory, send attachment
-  `application/zip`. Archive creation/response use disk files, not a ZIP byte buffer.
-- Response owns TemporaryDirectory. Cleanup in `finally` after success, send
-  failure, disconnect, or cancellation; generation failure cleans up immediately.
-- Disable response `pathsend`: send file chunks before deleting the workspace.
-
-## Image processing
-
-Entry points: app.processing.prepare_image, convert_image, _open_image.
-
-| Condition | Behavior |
+| Entry | Result |
 | --- | --- |
-| PNG/JPEG/WebP, RGB or L, no transparency, orientation 1 | Preserve original bytes. |
-| BMP/GIF/TIFF/HEIF/AVIF or normalization required | Decode using installed Pillow codecs; EXIF transpose; alpha over white; RGB PNG. |
-| Empty, invalid, truncated, unsupported format | OCRInputError. |
-| Multiple frames/pages | OCRInputError; supply one image. |
+| CLI `ocr FILE --output-path PARENT` | unique directory; stdout path, stderr progress |
+| `POST /api/ocr` | blocking ZIP; `X-OCR-Status`, `X-OCR-Failed-Pages` |
+| `POST /api/ocr/stream` | continuous SSE; execution survives disconnect |
+| `GET /api/ocr/jobs/{id}` | task snapshot + statistics |
+| `GET /api/ocr/jobs/{id}/events` | SSE replay/live events; `Last-Event-ID` |
+| `GET /api/ocr/jobs/{id}/download` | repeatable ZIP until expiry |
+| `GET /api/health` | application liveness, no Ollama call |
 
-Inspect decoded content, independent of filename or upload content type.
-Read BinaryIO from its current position; caller retains stream ownership.
-Register pillow-heif once with thumbnails disabled. Close decoded images.
-PDF, SVG, camera RAW, and multi-page processing remain outside this contract.
+- CLI exits: 0 complete, 2 partial, 1 failed/interrupted.
+- Blocking errors: input 400, backend/output 502, timeout 504, infrastructure 500.
+  Form validation 422; job lookup 404; unavailable download 409.
+- Streaming errors after acceptance use terminal SSE events.
+- Completed jobs/artifacts expire after 3600 seconds. Active downloads pin files;
+  expiry rejects new lookups/downloads without interrupting existing transmissions.
+- `JobZipResponse` releases pins in `finally`; shutdown drains workers/downloads.
+  Blocking `TemporaryZipResponse` owns its detached workspace through transmission.
+- One API process; in-memory job state is lost on restart. No durable queue.
+  Web UI unchanged; PDF controls/progress are CLI/API features.
 
-## Ollama and lifecycle
+## Input and model contracts
 
-- app.config.load_settings reads repository-root config.yaml independently of cwd.
-- Preserve configured base_url, model tag, and timeout_seconds; no implicit defaults.
-- Current model tag: deepseek-ocr:3b.
-- create_service owns and closes the SDK client, including on failures.
-- Client construction, API startup, and GET /api/health make no Ollama requests.
-- SDK handles base64 encoding; one generate request per image.
-- No automatic model downloads or retries. SDK output stays raw; service parses it.
-- HTTP/connection/server errors -> OCRBackendError.
-- HTTP transport timeout -> OCRTimeoutError.
-- Invalid response or missing generated text -> OCRBackendError.
-- The synchronous OCR endpoint runs in FastAPI's thread pool.
-
-## Adapter behavior
-
-| Outcome | CLI | POST /api/ocr |
-| --- | --- | --- |
-| Success | Export directory path; exit 0 | 200, application/zip attachment |
-| Invalid input | stderr; exit 1 | 400, JSON detail |
-| Backend failure | stderr; exit 1 | 502, JSON detail |
-| Invalid OCR grounding/crop | stderr; exit 1 | 502, JSON detail |
-| Backend timeout | stderr; exit 1 | 504, JSON detail |
-| Filesystem/export failure | stderr; exit 1 | 500, JSON detail |
-| Missing multipart file | N/A | 422 |
-
-CLI entry: app.__main__.main. API entries: app.api.ocr and lifespan.
-GET /api/health returns {"status":"ok"}; /docs exposes OpenAPI.
-ConfigError prevents invalid CLI invocation/API startup.
+- Detect input content independently of filename/MIME type. Read streams from their
+  current position; spool before request-owned uploads close.
+- PNG/JPEG/WebP bytes pass through when no normalization is needed.
+  BMP/GIF/TIFF/HEIF/AVIF use installed Pillow codecs; EXIF transpose, white alpha
+  background, RGB PNG. Multi-frame raster images remain unsupported.
+- PDF pages render individually at `scale=pdf_dpi/72`, RGB on white, respecting
+  rotation. Invalid/empty/locked PDFs fail inspection.
+- `load_settings`: repository-root config independent of cwd; required Ollama
+  URL/model/timeout; pipeline defaults are positive integers.
+- `recognize`: grounding Markdown prompt, one image, `stream=False`; raw response
+  text preserved. No startup inference/model download or automatic retry.
+- `build_document`: ordered grounded blocks; normalized 0–999 coordinates,
+  per-axis pixel scaling, exact `image` labels become PNG crops.
+  Malformed grounding or empty crops -> `OCROutputError`.
 
 ## Verification
 
 ```sh
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python -m app ocr samples/test-ebook-simple-page.png --output-path /tmp/ocr-output
-curl -F 'file=@samples/test-ebook-simple-page.png' http://127.0.0.1:8000/api/ocr -o /tmp/ocr-result.zip
+.venv/bin/python -m unittest discover -s tests -q
 ```
 
-45 tests pass without live Ollama:
-- tests/test_processing.py: format detection, pass-through, fallback formats,
-  HEIF, alpha/palette transparency, EXIF, invalid and multi-frame input.
-- tests/test_ollama_client.py: actual SDK over httpx.MockTransport; base64,
-  configured model/timeout, nonstreaming request, raw/empty text, upstream errors,
-  CLI/API through conversion and SDK.
-- tests/test_app.py: service calls, lifecycle, config, adapter output and errors.
-- tests/test_document.py: six-block double_drawer fixture, native/simplified/mixed
-  markers, multiple boxes, unknown labels, empty/plain text, invalid grounding,
-  binary crops, non-square pixel scaling, boundary pixels, EXIF-aligned crops.
-- tests/test_export.py: safe unique directories, identical CLI/ZIP files,
-  relative references, OpenAPI ZIP content, failed-write cleanup, HTTP 500,
-  workspace lifetime, failed/cancelled transmission, ASGI disconnect cleanup.
-
-No dependencies added; existing app/requirements.txt remains authoritative.
-Existing Starlette TestClient emits an httpx deprecation warning.
-
-## References
-
-- [Ollama Python](https://github.com/ollama/ollama-python): generate and SDK errors.
-- [Ollama vision](https://docs.ollama.com/capabilities/vision): byte input and SDK encoding.
-- [DeepSeek-OCR](https://ollama.com/library/deepseek-ocr): model and prompt.
-- [DeepSeek reference extraction](https://huggingface.co/deepseek-ai/DeepSeek-OCR/blob/main/modeling_deepseekocr.py): 0–999 grounding coordinates.
-- [Pillow EXIF transpose](https://pillow.readthedocs.io/en/stable/reference/ImageOps.html#PIL.ImageOps.exif_transpose).
-- [HEIF plugin registration](https://pillow-heif.readthedocs.io/en/latest/pillow-plugin.html).
+- 2026-10-27: **60 tests passed**, no live Ollama requests in the suite.
+- `tests/test_pipeline.py`: real PDF rendering/spawned workers, controlled overlap,
+  shared limits/fairness/backpressure, partial/all-failed jobs, replay/heartbeat,
+  disconnect survival, expiry/download pinning and shutdown.
+- Existing processing, grounding, SDK mock transport, CLI/API equivalence and
+  export/transmission cleanup regressions remain covered.
+- Live two-page default-settings smoke test succeeded; metrics in
+  [pdf-pipeline.md](pdf-pipeline.md#verification).
+- No dependencies added. `app/requirements.txt` remains authoritative.

@@ -1,0 +1,20 @@
+id: 1
+event: job.accepted
+data: {"sequence": 1, "job_id": "cccccccccccccccccccccccccccccccc", "timestamp": "2026-10-27T08:00:00+00:00", "stats": {"stages": {"image": {"pending": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}}
+
+id: 2
+event: task.updated
+data: {"sequence": 2, "job_id": "cccccccccccccccccccccccccccccccc", "timestamp": "2026-10-27T08:00:01+00:00", "stats": {"stages": {"image": {"ready": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "inspect", "stage": "image", "page": null, "dependencies": [], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 3
+event: task.updated
+data: {"sequence": 3, "job_id": "cccccccccccccccccccccccccccccccc", "timestamp": "2026-10-27T08:00:03+00:00", "stats": {"stages": {"image": {"running": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "inspect", "stage": "image", "page": null, "dependencies": [], "status": "running", "started_at": "2026-10-27T08:00:02+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 4
+event: task.updated
+data: {"sequence": 4, "job_id": "cccccccccccccccccccccccccccccccc", "timestamp": "2026-10-27T08:00:05+00:00", "stats": {"stages": {"image": {"failed": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "inspect", "stage": "image", "page": null, "dependencies": [], "status": "failed", "started_at": "2026-10-27T08:00:02+00:00", "finished_at": "2026-10-27T08:00:04+00:00", "duration_seconds": 0, "error": "Input is not a readable PDF (encrypted PDFs require an unlocked copy)."}}
+
+id: 5
+event: job.failed
+data: {"sequence": 5, "job_id": "cccccccccccccccccccccccccccccccc", "timestamp": "2026-10-27T08:00:06+00:00", "stats": {"stages": {"image": {"failed": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "result": {"status": "failed", "failed_pages": [], "download_url": null, "expires_at": "2026-10-27T09:00:06+00:00"}, "error": "Input is not a readable PDF (encrypted PDFs require an unlocked copy)."}
+

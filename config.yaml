@@ -2,3 +2,9 @@ ollama:
   base_url: http://ollama.intranet
   model: deepseek-ocr:3b
   timeout_seconds: 360
+
+pipeline:
+  pdf_dpi: 300
+  image_workers: 4
+  llm_workers: 1
+  postprocess_workers: 4

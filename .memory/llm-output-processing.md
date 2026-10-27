@@ -1,6 +1,8 @@
 # LLM output processing
 
-Entry point: `app.service.OCRService.ocr(file, filename) -> OCRDocument`.
+Pipeline entry points: `app.pipeline.Pipeline._recognize`, `postprocess_page`.
+Legacy in-process helper: `app.service.OCRService.ocr(file, filename) -> OCRDocument`.
+Scheduling, PDF assembly and streaming: [pdf-pipeline.md](pdf-pipeline.md).
 
 ```python
 image_bytes = prepare_image(file, filename)
@@ -13,9 +15,11 @@ Ollama response.response: str
   -> parse_document(text, width, height)
   -> ordered blocks + normalized/pixel boxes
   -> build_document: image blocks -> PNG bytes
-  -> render_markdown + export_document
-       CLI: document directory
-       API: temporary directory -> disk ZIP -> file response -> cleanup
+  -> render_markdown -> page-N/page.md + crop files
+  -> assemble_document (source page order) -> archive_document
+       CLI: copy completed directory to --output-path
+       blocking API: ZIP -> TemporaryZipResponse -> cleanup
+       streaming API: SSE result -> retained ZIP -> JobZipResponse -> expiry
 ```
 
 ## Recognition and parsing
@@ -100,14 +104,24 @@ Source: [app/export.py](../app/export.py), [app/api.py](../app/api.py),
   boundary newlines can produce extra blank lines.
 - Image references use `![Image](image-001.png)`. Captions keep their own position;
   no semantic heading conversion, caption attachment, or box metadata in Markdown.
-- `export_document`: create a unique `<safe-input-stem>-<suffix>` directory with
-  UTF-8 `document.md` and adjacent PNGs. Remove incomplete exports on failure.
-- CLI `--output-path` selects the parent, default cwd; print completed child path.
-- API `POST /api/ocr`: export under private `/tmp/ocr-*`, ZIP one top-level
-  document directory, return `application/zip` attachment from disk.
+- `postprocess_page`: write per-page Markdown/crops; release inference raster and
+  raw text after success. PDF crop names use `page-0001-image-001.png`; raster
+  exports retain `image-001.png`. All paths in Markdown remain relative.
+- `assemble_document`: combine pages numerically, prefix each PDF page with
+  `<!-- Page N -->`, retain failed-page placeholders; UTF-8 `document.md` and
+  adjacent PNGs in one unique directory. `export_document` remains available as
+  the single-image export helper.
+- CLI `--output-path` selects the parent, default cwd; stdout prints completed
+  child path, stderr displays task progress. Partial output exits 2.
+- API `POST /api/ocr`: same pipeline under private `/tmp/ocr-*`; ZIP one top-level
+  document directory, return `application/zip` attachment from disk. Partial
+  response headers: `X-OCR-Status`, `X-OCR-Failed-Pages`.
 - `TemporaryZipResponse.__call__`: keep files through transmission, clean in
   `finally` on completion/error/cancellation. Disable `pathsend` so transmission
   finishes before cleanup. Generation failures clean the workspace immediately.
+- Streaming jobs retain completed files for one hour. `JobZipResponse` pins files
+  through transmission; `Pipeline.expire` removes unpinned expired workspaces.
+  Disconnecting an SSE subscriber does not cancel recognition.
 
 ## Errors and verification
 
@@ -118,7 +132,11 @@ Source: [app/export.py](../app/export.py), [app/api.py](../app/api.py),
 | Backend timeout | `OCRTimeoutError` | 504 |
 | Filesystem/export failure | `OSError` | 500 |
 
-CLI errors write stderr and exit 1; no success path is printed.
+The table describes blocking failure responses. For multi-page PDFs, expected
+page errors become placeholders and the job continues; any successful page allows
+partial output. All-page/infrastructure failure publishes no document. Streaming
+jobs report failures via SSE. CLI fatal errors write stderr and exit 1; partial
+output prints its path and exits 2.
 
 - `tests/test_document.py`: supplied `tests/fixtures/double_drawer.txt` -> six
   blocks, one PNG; native/simplified/mixed markers; exact content; pixel/EXIF checks.

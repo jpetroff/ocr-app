@@ -1,0 +1,35 @@
+{
+  "job_id": "cccccccccccccccccccccccccccccccc",
+  "sequence": 5,
+  "status": "failed",
+  "stats": {
+    "stages": {
+      "image": {
+        "failed": 1
+      }
+    },
+    "pages_total": 0,
+    "pages_completed": 0,
+    "pages_failed": 0
+  },
+  "tasks": [
+    {
+      "id": "inspect",
+      "stage": "image",
+      "page": null,
+      "dependencies": [],
+      "status": "failed",
+      "started_at": "2026-10-27T08:00:02+00:00",
+      "finished_at": "2026-10-27T08:00:04+00:00",
+      "duration_seconds": 0,
+      "error": "Input is not a readable PDF (encrypted PDFs require an unlocked copy)."
+    }
+  ],
+  "result": {
+    "status": "failed",
+    "failed_pages": [],
+    "download_url": null,
+    "expires_at": "2026-10-27T09:00:06+00:00"
+  },
+  "error": "Input is not a readable PDF (encrypted PDFs require an unlocked copy)."
+}

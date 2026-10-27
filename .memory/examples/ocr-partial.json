@@ -1,0 +1,156 @@
+{
+  "job_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "sequence": 30,
+  "status": "partial",
+  "stats": {
+    "stages": {
+      "image": {
+        "completed": 3
+      },
+      "llm": {
+        "completed": 1,
+        "failed": 1
+      },
+      "postprocess": {
+        "completed": 3,
+        "skipped": 1
+      }
+    },
+    "pages_total": 2,
+    "pages_completed": 1,
+    "pages_failed": 1
+  },
+  "tasks": [
+    {
+      "id": "inspect",
+      "stage": "image",
+      "page": null,
+      "dependencies": [],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:02+00:00",
+      "finished_at": "2026-10-27T08:00:04+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "page-1:image",
+      "stage": "image",
+      "page": 1,
+      "dependencies": [
+        "inspect"
+      ],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:08+00:00",
+      "finished_at": "2026-10-27T08:00:10+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "page-1:llm",
+      "stage": "llm",
+      "page": 1,
+      "dependencies": [
+        "page-1:image"
+      ],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:18+00:00",
+      "finished_at": "2026-10-27T08:00:20+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "page-1:postprocess",
+      "stage": "postprocess",
+      "page": 1,
+      "dependencies": [
+        "page-1:llm"
+      ],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:23+00:00",
+      "finished_at": "2026-10-27T08:00:25+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "page-2:image",
+      "stage": "image",
+      "page": 2,
+      "dependencies": [
+        "inspect"
+      ],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:13+00:00",
+      "finished_at": "2026-10-27T08:00:15+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "page-2:llm",
+      "stage": "llm",
+      "page": 2,
+      "dependencies": [
+        "page-2:image"
+      ],
+      "status": "failed",
+      "started_at": "2026-10-27T08:00:29+00:00",
+      "finished_at": "2026-10-27T08:00:31+00:00",
+      "duration_seconds": 0,
+      "error": "Ollama OCR request timed out."
+    },
+    {
+      "id": "page-2:postprocess",
+      "stage": "postprocess",
+      "page": 2,
+      "dependencies": [
+        "page-2:llm"
+      ],
+      "status": "skipped",
+      "started_at": null,
+      "finished_at": "2026-10-27T08:00:33+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "assemble",
+      "stage": "postprocess",
+      "page": null,
+      "dependencies": [
+        "page-1:postprocess",
+        "page-2:postprocess"
+      ],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:37+00:00",
+      "finished_at": "2026-10-27T08:00:39+00:00",
+      "duration_seconds": 0,
+      "error": null
+    },
+    {
+      "id": "archive",
+      "stage": "postprocess",
+      "page": null,
+      "dependencies": [
+        "assemble"
+      ],
+      "status": "completed",
+      "started_at": "2026-10-27T08:00:42+00:00",
+      "finished_at": "2026-10-27T08:00:44+00:00",
+      "duration_seconds": 0,
+      "error": null
+    }
+  ],
+  "result": {
+    "status": "partial",
+    "failed_pages": [
+      {
+        "page": 2,
+        "markdown": null,
+        "images": [],
+        "error": "Ollama OCR request timed out.",
+        "failed_stage": "llm"
+      }
+    ],
+    "download_url": "/api/ocr/jobs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/download",
+    "expires_at": "2026-10-27T09:00:46+00:00"
+  },
+  "error": null
+}

@@ -15,10 +15,25 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class PipelineSettings:
+    pdf_dpi: int = 300
+    image_workers: int = 4
+    llm_workers: int = 1
+    postprocess_workers: int = 4
+
+    def __post_init__(self) -> None:
+        for name in self.__dataclass_fields__:
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ConfigError(f"pipeline.{name} must be a positive integer.")
+
+
+@dataclass(frozen=True)
 class OllamaSettings:
     base_url: str
     model: str
     timeout_seconds: float
+    pipeline: PipelineSettings = PipelineSettings()
 
 
 def load_settings(path: Path = CONFIG_PATH) -> OllamaSettings:
@@ -52,4 +67,10 @@ def load_settings(path: Path = CONFIG_PATH) -> OllamaSettings:
         or timeout <= 0
     ):
         raise ConfigError("ollama.timeout_seconds must be a finite positive number.")
-    return OllamaSettings(base_url=base_url, model=model, timeout_seconds=float(timeout))
+    pipeline = document.get("pipeline", {})
+    if not isinstance(pipeline, dict):
+        raise ConfigError("pipeline must be a mapping.")
+    if set(pipeline) - set(PipelineSettings.__dataclass_fields__):
+        raise ConfigError("Unknown pipeline setting.")
+    return OllamaSettings(base_url=base_url, model=model, timeout_seconds=float(timeout),
+                          pipeline=PipelineSettings(**pipeline))

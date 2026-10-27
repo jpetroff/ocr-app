@@ -84,20 +84,19 @@ class AdapterTests(unittest.TestCase):
     def test_cli_and_api_export_identical_plain_markdown(self):
         with tempfile.TemporaryDirectory() as directory, TestClient(app) as client:
             path = Path(directory) / "input.png"
-            path.write_bytes(b"image")
+            path.write_bytes(encoded_image())
             for raw in ('  # OCR\n"quoted" café\r\n\n', "no trailing newline", ""):
                 with self.subTest(raw=raw):
                     stdout, stderr = StringIO(), StringIO()
-                    with patch("app.service.prepare_image", return_value=encoded_image()):
-                        with patch.object(OllamaOCRClient, "recognize", return_value=raw):
-                            with redirect_stdout(stdout), redirect_stderr(stderr):
-                                status = main(["ocr", str(path), "--output-path", directory])
-                            response = client.post(
-                                "/api/ocr",
-                                files={"file": ("input.png", b"image", "image/png")},
-                            )
+                    with patch.object(OllamaOCRClient, "recognize", return_value=raw):
+                        with redirect_stdout(stdout), redirect_stderr(stderr):
+                            status = main(["ocr", str(path), "--output-path", directory])
+                        response = client.post(
+                            "/api/ocr",
+                            files={"file": ("input.png", encoded_image(), "image/png")},
+                        )
                     self.assertEqual(status, 0)
-                    self.assertEqual(stderr.getvalue(), "")
+                    self.assertIn("archive completed", stderr.getvalue())
                     exported = Path(stdout.getvalue().strip())
                     self.assertEqual(exported.parent, Path(directory))
                     self.assertEqual((exported / "document.md").read_bytes(), raw.encode("utf-8"))
@@ -140,7 +139,7 @@ class AdapterTests(unittest.TestCase):
     def test_backend_errors_have_no_success_output(self):
         with tempfile.TemporaryDirectory() as directory, TestClient(app) as client:
             path = Path(directory) / "input.png"
-            path.write_bytes(b"image")
+            path.write_bytes(encoded_image())
             for error, status_code in (
                 (OCRBackendError("Ollama unavailable"), 502),
                 (OCRTimeoutError("Ollama timed out"), 504),
@@ -148,13 +147,12 @@ class AdapterTests(unittest.TestCase):
             ):
                 with self.subTest(error=error):
                     stdout, stderr = StringIO(), StringIO()
-                    with patch("app.service.prepare_image", return_value=b"image"):
-                        with patch.object(OllamaOCRClient, "recognize", side_effect=error):
-                            with redirect_stdout(stdout), redirect_stderr(stderr):
-                                status = main(["ocr", str(path)])
-                            response = client.post(
-                                "/api/ocr", files={"file": ("input.png", b"image", "image/png")}
-                            )
+                    with patch.object(OllamaOCRClient, "recognize", side_effect=error):
+                        with redirect_stdout(stdout), redirect_stderr(stderr):
+                            status = main(["ocr", str(path)])
+                        response = client.post(
+                            "/api/ocr", files={"file": ("input.png", encoded_image(), "image/png")}
+                        )
                     self.assertEqual(status, 1)
                     self.assertEqual(stdout.getvalue(), "")
                     self.assertIn(str(error), stderr.getvalue())

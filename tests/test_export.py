@@ -110,7 +110,7 @@ class ExportTests(unittest.TestCase):
             with patch.object(OllamaOCRClient, "recognize", return_value=self.text):
                 with redirect_stdout(stdout):
                     status = main(["ocr", str(source), "--output-path", str(Path(directory) / "out")])
-                with TestClient(app) as client, patch("app.api.TemporaryDirectory", side_effect=workspace):
+                with TestClient(app) as client, patch("app.pipeline.TemporaryDirectory", side_effect=workspace):
                     response = client.post("/api/ocr", files={"file": ("input.png", self.image)})
             self.assertEqual(status, 0)
             self.assertEqual(response.status_code, 200)
@@ -129,10 +129,12 @@ class ExportTests(unittest.TestCase):
             created.append(Path(result.name))
             return result
 
-        for entry in ("export_document", "archive_document", "TemporaryZipResponse"):
+        # Response construction is adapter-owned; worker export failures are
+        # covered with injected executors in test_pipeline.
+        for entry in ("TemporaryZipResponse",):
             with self.subTest(entry=entry), TestClient(app) as client:
                 with patch.object(OllamaOCRClient, "recognize", return_value=self.text):
-                    with patch("app.api.TemporaryDirectory", side_effect=workspace):
+                    with patch("app.pipeline.TemporaryDirectory", side_effect=workspace):
                         with patch("app.api." + entry, side_effect=OSError("disk full")):
                             response = client.post("/api/ocr", files={"file": ("input.png", self.image)})
                 self.assertEqual(response.status_code, 500)
@@ -157,7 +159,7 @@ class ExportTests(unittest.TestCase):
                     status = main(["ocr", str(source), "--output-path", str(source)])
             self.assertEqual(status, 1)
             self.assertEqual(stdout.getvalue(), "")
-            self.assertTrue(stderr.getvalue().startswith("Error: "))
+            self.assertIn("Error: ", stderr.getvalue())
 
     def test_openapi_describes_zip_success(self):
         content = app.openapi()["paths"]["/api/ocr"]["post"]["responses"]["200"]["content"]

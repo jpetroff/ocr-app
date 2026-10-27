@@ -1,0 +1,128 @@
+id: 1
+event: job.accepted
+data: {"sequence": 1, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:00+00:00", "stats": {"stages": {"image": {"pending": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}}
+
+id: 2
+event: task.updated
+data: {"sequence": 2, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:01+00:00", "stats": {"stages": {"image": {"ready": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "inspect", "stage": "image", "page": null, "dependencies": [], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 3
+event: task.updated
+data: {"sequence": 3, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:03+00:00", "stats": {"stages": {"image": {"running": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "inspect", "stage": "image", "page": null, "dependencies": [], "status": "running", "started_at": "2026-10-27T08:00:02+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 4
+event: task.updated
+data: {"sequence": 4, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:05+00:00", "stats": {"stages": {"image": {"completed": 1}}, "pages_total": 0, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "inspect", "stage": "image", "page": null, "dependencies": [], "status": "completed", "started_at": "2026-10-27T08:00:02+00:00", "finished_at": "2026-10-27T08:00:04+00:00", "duration_seconds": 0, "error": null}}
+
+id: 5
+event: job.planned
+data: {"sequence": 5, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:06+00:00", "stats": {"stages": {"image": {"completed": 1, "pending": 2}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "pages": 2, "is_pdf": true}
+
+id: 6
+event: task.updated
+data: {"sequence": 6, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:07+00:00", "stats": {"stages": {"image": {"completed": 1, "ready": 1, "pending": 1}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:image", "stage": "image", "page": 1, "dependencies": ["inspect"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 7
+event: task.updated
+data: {"sequence": 7, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:09+00:00", "stats": {"stages": {"image": {"completed": 1, "running": 1, "pending": 1}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:image", "stage": "image", "page": 1, "dependencies": ["inspect"], "status": "running", "started_at": "2026-10-27T08:00:08+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 8
+event: task.updated
+data: {"sequence": 8, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:11+00:00", "stats": {"stages": {"image": {"completed": 2, "pending": 1}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:image", "stage": "image", "page": 1, "dependencies": ["inspect"], "status": "completed", "started_at": "2026-10-27T08:00:08+00:00", "finished_at": "2026-10-27T08:00:10+00:00", "duration_seconds": 0, "error": null}}
+
+id: 9
+event: task.updated
+data: {"sequence": 9, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:12+00:00", "stats": {"stages": {"image": {"completed": 2, "ready": 1}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-2:image", "stage": "image", "page": 2, "dependencies": ["inspect"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 10
+event: task.updated
+data: {"sequence": 10, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:14+00:00", "stats": {"stages": {"image": {"completed": 2, "running": 1}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-2:image", "stage": "image", "page": 2, "dependencies": ["inspect"], "status": "running", "started_at": "2026-10-27T08:00:13+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 11
+event: task.updated
+data: {"sequence": 11, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:16+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"pending": 2}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-2:image", "stage": "image", "page": 2, "dependencies": ["inspect"], "status": "completed", "started_at": "2026-10-27T08:00:13+00:00", "finished_at": "2026-10-27T08:00:15+00:00", "duration_seconds": 0, "error": null}}
+
+id: 12
+event: task.updated
+data: {"sequence": 12, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:17+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"ready": 1, "pending": 1}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:llm", "stage": "llm", "page": 1, "dependencies": ["page-1:image"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 13
+event: task.updated
+data: {"sequence": 13, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:19+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"running": 1, "pending": 1}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:llm", "stage": "llm", "page": 1, "dependencies": ["page-1:image"], "status": "running", "started_at": "2026-10-27T08:00:18+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 14
+event: task.updated
+data: {"sequence": 14, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:21+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "pending": 1}, "postprocess": {"pending": 4}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:llm", "stage": "llm", "page": 1, "dependencies": ["page-1:image"], "status": "completed", "started_at": "2026-10-27T08:00:18+00:00", "finished_at": "2026-10-27T08:00:20+00:00", "duration_seconds": 0, "error": null}}
+
+id: 15
+event: task.updated
+data: {"sequence": 15, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:22+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "pending": 1}, "postprocess": {"ready": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:postprocess", "stage": "postprocess", "page": 1, "dependencies": ["page-1:llm"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 16
+event: task.updated
+data: {"sequence": 16, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:24+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "pending": 1}, "postprocess": {"running": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:postprocess", "stage": "postprocess", "page": 1, "dependencies": ["page-1:llm"], "status": "running", "started_at": "2026-10-27T08:00:23+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 17
+event: task.updated
+data: {"sequence": 17, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:26+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "pending": 1}, "postprocess": {"completed": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 0, "pages_failed": 0}, "task": {"id": "page-1:postprocess", "stage": "postprocess", "page": 1, "dependencies": ["page-1:llm"], "status": "completed", "started_at": "2026-10-27T08:00:23+00:00", "finished_at": "2026-10-27T08:00:25+00:00", "duration_seconds": 0, "error": null}}
+
+id: 18
+event: page.completed
+data: {"sequence": 18, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:27+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "pending": 1}, "postprocess": {"completed": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "page": {"page": 1, "markdown": null, "images": ["page-0001-image-001.png"], "error": null, "failed_stage": null}}
+
+id: 19
+event: task.updated
+data: {"sequence": 19, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:28+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "ready": 1}, "postprocess": {"completed": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "task": {"id": "page-2:llm", "stage": "llm", "page": 2, "dependencies": ["page-2:image"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 20
+event: task.updated
+data: {"sequence": 20, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:30+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 1, "running": 1}, "postprocess": {"completed": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "task": {"id": "page-2:llm", "stage": "llm", "page": 2, "dependencies": ["page-2:image"], "status": "running", "started_at": "2026-10-27T08:00:29+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 21
+event: task.updated
+data: {"sequence": 21, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:32+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 1, "pending": 3}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "task": {"id": "page-2:llm", "stage": "llm", "page": 2, "dependencies": ["page-2:image"], "status": "completed", "started_at": "2026-10-27T08:00:29+00:00", "finished_at": "2026-10-27T08:00:31+00:00", "duration_seconds": 0, "error": null}}
+
+id: 22
+event: task.updated
+data: {"sequence": 22, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:33+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 1, "ready": 1, "pending": 2}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "task": {"id": "page-2:postprocess", "stage": "postprocess", "page": 2, "dependencies": ["page-2:llm"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 23
+event: task.updated
+data: {"sequence": 23, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:35+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 1, "running": 1, "pending": 2}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "task": {"id": "page-2:postprocess", "stage": "postprocess", "page": 2, "dependencies": ["page-2:llm"], "status": "running", "started_at": "2026-10-27T08:00:34+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 24
+event: task.updated
+data: {"sequence": 24, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:37+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 2, "pending": 2}}, "pages_total": 2, "pages_completed": 1, "pages_failed": 0}, "task": {"id": "page-2:postprocess", "stage": "postprocess", "page": 2, "dependencies": ["page-2:llm"], "status": "completed", "started_at": "2026-10-27T08:00:34+00:00", "finished_at": "2026-10-27T08:00:36+00:00", "duration_seconds": 0, "error": null}}
+
+id: 25
+event: page.completed
+data: {"sequence": 25, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:38+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 2, "pending": 2}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "page": {"page": 2, "markdown": null, "images": ["page-0002-image-001.png"], "error": null, "failed_stage": null}}
+
+id: 26
+event: task.updated
+data: {"sequence": 26, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:39+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 2, "ready": 1, "pending": 1}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "task": {"id": "assemble", "stage": "postprocess", "page": null, "dependencies": ["page-1:postprocess", "page-2:postprocess"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 27
+event: task.updated
+data: {"sequence": 27, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:41+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 2, "running": 1, "pending": 1}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "task": {"id": "assemble", "stage": "postprocess", "page": null, "dependencies": ["page-1:postprocess", "page-2:postprocess"], "status": "running", "started_at": "2026-10-27T08:00:40+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 28
+event: task.updated
+data: {"sequence": 28, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:43+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 3, "pending": 1}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "task": {"id": "assemble", "stage": "postprocess", "page": null, "dependencies": ["page-1:postprocess", "page-2:postprocess"], "status": "completed", "started_at": "2026-10-27T08:00:40+00:00", "finished_at": "2026-10-27T08:00:42+00:00", "duration_seconds": 0, "error": null}}
+
+id: 29
+event: task.updated
+data: {"sequence": 29, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:44+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 3, "ready": 1}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "task": {"id": "archive", "stage": "postprocess", "page": null, "dependencies": ["assemble"], "status": "ready", "started_at": null, "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 30
+event: task.updated
+data: {"sequence": 30, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:46+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 3, "running": 1}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "task": {"id": "archive", "stage": "postprocess", "page": null, "dependencies": ["assemble"], "status": "running", "started_at": "2026-10-27T08:00:45+00:00", "finished_at": null, "duration_seconds": null, "error": null}}
+
+id: 31
+event: task.updated
+data: {"sequence": 31, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:48+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 4}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "task": {"id": "archive", "stage": "postprocess", "page": null, "dependencies": ["assemble"], "status": "completed", "started_at": "2026-10-27T08:00:45+00:00", "finished_at": "2026-10-27T08:00:47+00:00", "duration_seconds": 0, "error": null}}
+
+id: 32
+event: job.completed
+data: {"sequence": 32, "job_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "timestamp": "2026-10-27T08:00:49+00:00", "stats": {"stages": {"image": {"completed": 3}, "llm": {"completed": 2}, "postprocess": {"completed": 4}}, "pages_total": 2, "pages_completed": 2, "pages_failed": 0}, "result": {"status": "completed", "failed_pages": [], "download_url": "/api/ocr/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/download", "expires_at": "2026-10-27T09:00:49+00:00"}, "error": null}
+

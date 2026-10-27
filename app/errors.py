@@ -6,7 +6,7 @@ class OCRError(Exception):
 
 
 class OCRInputError(OCRError):
-    """The input cannot be processed as one supported image."""
+    """The input cannot be processed as a supported image or readable PDF."""
 
 
 class OCRBackendError(OCRError):
