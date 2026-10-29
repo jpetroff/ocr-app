@@ -416,6 +416,10 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class APIAndCLITests(unittest.TestCase):
+    def setUp(self):
+        from provider_helpers import select_provider
+        select_provider(self)
+
     def test_real_spawned_pdf_pipeline_stream_status_reconnect_and_repeat_download(self):
         raw = "text\nimage[[0,0,999,999]]"
         with TestClient(app) as client, patch.object(OllamaOCRClient, "recognize", return_value=raw) as recognize:

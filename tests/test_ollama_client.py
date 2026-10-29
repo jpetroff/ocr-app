@@ -20,6 +20,7 @@ from app.config import OllamaSettings
 from app.errors import OCRBackendError, OCRTimeoutError
 from app.ollama_client import OllamaOCRClient
 from test_processing import encoded_image
+from provider_helpers import select_provider
 
 
 SETTINGS = OllamaSettings("http://ollama.test:11434", "deepseek-ocr:3b", 45)
@@ -33,6 +34,9 @@ def sdk_client(handler):
 
 
 class OllamaClientTests(unittest.TestCase):
+    def setUp(self):
+        select_provider(self, SETTINGS)
+
     def test_sdk_sends_image_and_preserves_raw_text(self):
         image_bytes = encoded_image()
         raw = '  # text\n"café"\n\n'

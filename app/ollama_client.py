@@ -3,12 +3,12 @@
 from httpx import HTTPError, TimeoutException
 from ollama import Client, ResponseError
 
-from .config import OllamaSettings
+from .config import OCRSettings
 from .errors import OCRBackendError, OCRTimeoutError
 
 
 class OllamaOCRClient:
-    def __init__(self, settings: OllamaSettings) -> None:
+    def __init__(self, settings: OCRSettings) -> None:
         self.settings = settings
         # Construction does not contact Ollama or download a model.
         self.client = Client(host=settings.base_url, timeout=settings.timeout_seconds)

@@ -11,6 +11,7 @@ import tempfile
 
 from .config import ConfigError, load_settings
 from .errors import OCRError
+from .page_selection import PageSelection, parse_page_ranges
 from .service import create_pipeline
 
 
@@ -24,13 +25,21 @@ def positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError("must be a positive integer") from None
 
 
+def page_ranges(value: str):
+    try:
+        return parse_page_ranges(value)
+    except OCRError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 async def run_ocr(args, settings) -> int:
     overrides = {name: getattr(args, name) for name in settings.pipeline.__dataclass_fields__
                  if getattr(args, name) is not None}
     settings = replace(settings, pipeline=replace(settings.pipeline, **overrides))
     async with create_pipeline(settings) as service:
         with args.file.open("rb") as file:
-            job = await service.submit(file, args.file.name, save_raw=args.save_raw)
+            job = await service.submit(file, args.file.name, save_raw=args.save_raw,
+                                       page_selection=PageSelection(include=args.include, exclude=args.exclude))
         try:
             async for event in service.events(job):
                 data_line = next((line[6:] for line in event.splitlines() if line.startswith("data: ")), None)
@@ -89,6 +98,11 @@ def main(argv: list[str] | None = None) -> int:
     ocr.add_argument("--output-path", "--output", type=Path, default=Path.cwd(), help="Parent directory for a new document folder")
     ocr.add_argument("--save-raw", action="store_true",
                      help="Save raw LLM responses beside the output, even if post-processing fails")
+    selection = ocr.add_mutually_exclusive_group()
+    for mode in ("include", "exclude"):
+        selection.add_argument(f"--{mode}", type=page_ranges, metavar="RANGES",
+                               help=f"{mode.capitalize()} one-based pages: 1-23,45-44,50,79-; "
+                                    "use = for leading open ranges, e.g. --" + mode + "=-5,8")
     for option in ("pdf-dpi", "image-workers", "llm-workers", "postprocess-workers"):
         ocr.add_argument(f"--{option}", type=positive_int, default=None,
                          help="Override the corresponding pipeline setting")

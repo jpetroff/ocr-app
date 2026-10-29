@@ -3,6 +3,13 @@ ollama:
   model: deepseek-ocr:3b
   timeout_seconds: 360
 
+openailike:
+  base_url: http://llama.intranet
+  model: deepseek-ocr
+  timeout: 360
+  
+provider: openailike
+
 pipeline:
   pdf_dpi: 300
   image_workers: 4

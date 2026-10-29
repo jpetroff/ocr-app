@@ -3,11 +3,13 @@
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 import yaml
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+DEFAULT_OCR_PROMPT = "<|grounding|>Convert the document to markdown."
 
 
 class ConfigError(ValueError):
@@ -29,26 +31,38 @@ class PipelineSettings:
 
 
 @dataclass(frozen=True)
-class OllamaSettings:
+class OCRSettings:
     base_url: str
     model: str
     timeout_seconds: float
     pipeline: PipelineSettings = PipelineSettings()
+    provider: Literal["ollama", "openailike"] = "ollama"
+    prompt: str = DEFAULT_OCR_PROMPT
 
 
-def load_settings(path: Path = CONFIG_PATH) -> OllamaSettings:
+OllamaSettings = OCRSettings
+
+
+def load_settings(path: Path = CONFIG_PATH) -> OCRSettings:
     try:
         with path.open(encoding="utf-8") as file:
             document = yaml.safe_load(file)
     except (OSError, UnicodeError, yaml.YAMLError) as exc:
         raise ConfigError(f"Cannot read configuration {path}: {exc}") from exc
 
-    if not isinstance(document, dict) or not isinstance(document.get("ollama"), dict):
-        raise ConfigError("config.yaml must contain an 'ollama' mapping.")
-    values = document["ollama"]
+    if not isinstance(document, dict):
+        raise ConfigError("config.yaml must contain a mapping.")
+    provider = document.get("provider", "ollama")
+    if not isinstance(provider, str) or provider not in {"ollama", "openailike"}:
+        raise ConfigError("provider must be 'ollama' or 'openailike'.")
+    if not isinstance(document.get(provider), dict):
+        raise ConfigError(f"config.yaml must contain an '{provider}' mapping.")
+    values = document[provider]
     base_url = values.get("base_url")
     model = values.get("model")
-    timeout = values.get("timeout_seconds")
+    timeout_key = "timeout_seconds" if provider == "ollama" else "timeout"
+    timeout = values.get(timeout_key)
+    prompt = values.get("prompt", DEFAULT_OCR_PROMPT) if provider == "openailike" else DEFAULT_OCR_PROMPT
     try:
         url = urlsplit(base_url) if isinstance(base_url, str) else None
         valid_url = url is not None and url.scheme in {"http", "https"} and bool(url.hostname)
@@ -57,20 +71,22 @@ def load_settings(path: Path = CONFIG_PATH) -> OllamaSettings:
     except ValueError:
         valid_url = False
     if not valid_url:
-        raise ConfigError("ollama.base_url must be a valid HTTP or HTTPS URL.")
+        raise ConfigError(f"{provider}.base_url must be a valid HTTP or HTTPS URL.")
     if not isinstance(model, str) or not model.strip():
-        raise ConfigError("ollama.model must be a non-empty string.")
+        raise ConfigError(f"{provider}.model must be a non-empty string.")
     if (
         isinstance(timeout, bool)
         or not isinstance(timeout, (int, float))
         or not isfinite(timeout)
         or timeout <= 0
     ):
-        raise ConfigError("ollama.timeout_seconds must be a finite positive number.")
+        raise ConfigError(f"{provider}.{timeout_key} must be a finite positive number.")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ConfigError("openailike.prompt must be a non-empty string.")
     pipeline = document.get("pipeline", {})
     if not isinstance(pipeline, dict):
         raise ConfigError("pipeline must be a mapping.")
     if set(pipeline) - set(PipelineSettings.__dataclass_fields__):
         raise ConfigError("Unknown pipeline setting.")
-    return OllamaSettings(base_url=base_url, model=model, timeout_seconds=float(timeout),
-                          pipeline=PipelineSettings(**pipeline))
+    return OCRSettings(base_url=base_url, model=model, timeout_seconds=float(timeout),
+                       pipeline=PipelineSettings(**pipeline), provider=provider, prompt=prompt)

@@ -10,11 +10,11 @@ class OCRInputError(OCRError):
 
 
 class OCRBackendError(OCRError):
-    """Ollama is unavailable or failed to return generated text."""
+    """The OCR backend is unavailable or failed to return generated text."""
 
 
 class OCRTimeoutError(OCRBackendError):
-    """Ollama did not respond within the configured timeout."""
+    """The OCR backend did not respond within the configured timeout."""
 
 
 class OCROutputError(OCRBackendError):

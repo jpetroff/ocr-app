@@ -17,11 +17,12 @@ import threading
 import time
 from uuid import uuid4
 
-from .config import OllamaSettings, PipelineSettings
+from .config import OCRSettings, PipelineSettings
 from .document import build_document
 from .errors import OCRBackendError, OCRInputError
 from .export import archive_document, render_markdown
-from .ollama_client import OllamaOCRClient
+from .ocr_client import create_ocr_client
+from .page_selection import PageSelection
 from .processing import prepare_image
 
 
@@ -51,6 +52,7 @@ class JobPlan:
     tasks: dict[str, TaskRecord] = field(default_factory=dict)
     page_count: int = 0
     is_pdf: bool = False
+    source_page_count: int = 0
 
 
 @dataclass
@@ -161,13 +163,14 @@ def assemble_document(root: str, filename: str, is_pdf: bool, pages: list[PageRe
 
 
 class Job:
-    def __init__(self, workspace, filename, dpi, save_raw=False):
+    def __init__(self, workspace, filename, dpi, save_raw=False, page_selection=None):
         self.id = uuid4().hex
         self.workspace = workspace
         self.root = Path(workspace.name)
         self.filename = filename
         self.dpi = dpi
         self.save_raw = save_raw
+        self.page_selection = page_selection or PageSelection()
         self.plan = JobPlan({"inspect": TaskRecord("inspect", "image")})
         self.pages: dict[int, PageResult] = {}
         self.status = "running"
@@ -189,6 +192,7 @@ class Job:
             counts = stages.setdefault(task.stage, {})
             counts[task.status] = counts.get(task.status, 0) + 1
         return {"stages": stages, "pages_total": self.plan.page_count,
+                "pages_source": self.plan.source_page_count,
                 "pages_completed": sum(p.error is None for p in self.pages.values()),
                 "pages_failed": sum(p.error is not None for p in self.pages.values())}
 
@@ -216,7 +220,7 @@ class Job:
 class Pipeline:
     """All task state is owned by the event loop; executors only touch job files."""
 
-    def __init__(self, settings: OllamaSettings, *, image_executor=None, post_executor=None,
+    def __init__(self, settings: OCRSettings, *, image_executor=None, post_executor=None,
                  client_factory=None, retention_seconds=3600):
         self.settings = settings
         self.limits = {"image": settings.pipeline.image_workers, "llm": settings.pipeline.llm_workers,
@@ -227,7 +231,7 @@ class Pipeline:
             "llm": ThreadPoolExecutor(self.limits["llm"], thread_name_prefix="ocr-llm"),
             "postprocess": post_executor or ProcessPoolExecutor(self.limits["postprocess"], mp_context=context),
         }
-        self.client_factory = client_factory or (lambda: OllamaOCRClient(settings))
+        self.client_factory = client_factory or (lambda: create_ocr_client(settings))
         self.local = threading.local()
         self.clients = []
         self.jobs: dict[str, Job] = {}
@@ -238,7 +242,8 @@ class Pipeline:
         self.cursor = {stage: None for stage in self.limits}
         self.runner = asyncio.create_task(self._run())
 
-    async def submit(self, file, filename, dpi=None, *, save_raw=False) -> Job:
+    async def submit(self, file, filename, dpi=None, *, save_raw=False,
+                     page_selection: PageSelection | None = None) -> Job:
         if not self.accepting:
             raise RuntimeError("OCR service is shutting down.")
         dpi = self.settings.pipeline.pdf_dpi if dpi is None else dpi
@@ -256,7 +261,7 @@ class Pipeline:
                 raise
             if not self.accepting:
                 raise RuntimeError("OCR service is shutting down.")
-            job = Job(workspace, filename, dpi, save_raw=save_raw)
+            job = Job(workspace, filename, dpi, save_raw=save_raw, page_selection=page_selection)
             self.jobs[job.id] = job
             job.emit("job.accepted")
             self.wake.set()
@@ -288,17 +293,19 @@ class Pipeline:
         job.emit("task.updated", task=task.snapshot())
 
     def _plan(self, job, is_pdf, count):
-        job.plan.is_pdf, job.plan.page_count = is_pdf, count
-        for page in range(1, count + 1):
+        job.plan.is_pdf, job.plan.source_page_count = is_pdf, count
+        pages = job.page_selection.resolve(count)
+        job.plan.page_count = len(pages)
+        for page in pages:
             dependency = "inspect"
             for stage in ("image", "llm", "postprocess"):
                 name = f"page-{page}:{stage}"
                 job.plan.tasks[name] = TaskRecord(name, stage, page, [dependency])
                 dependency = name
         job.plan.tasks["assemble"] = TaskRecord("assemble", "postprocess", dependencies=[
-            f"page-{p}:postprocess" for p in range(1, count + 1)])
+            f"page-{p}:postprocess" for p in pages])
         job.plan.tasks["archive"] = TaskRecord("archive", "postprocess", dependencies=["assemble"])
-        job.emit("job.planned", pages=count, is_pdf=is_pdf)
+        job.emit("job.planned", pages=len(pages), source_pages=count, selected_pages=pages, is_pdf=is_pdf)
 
     def _eligible(self, job, task):
         if job.error or job.cancel_requested or task.status != "pending":

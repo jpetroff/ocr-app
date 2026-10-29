@@ -10,7 +10,7 @@ CLI file / API upload
   -> Pipeline.submit: job-owned disk copy
   -> inspect_input: content detection + page count / raster validation
   -> page-N:image       prepare_page, PDF render or normalized raster
-  -> page-N:llm         OllamaOCRClient.recognize, one request/page
+  -> page-N:llm         OCRClient.recognize, one request/page
   -> page-N:postprocess build_document + render_markdown + PNG crops
   -> assemble_document: ordered document.md + adjacent crops
   -> archive_document: disk-backed ZIP
@@ -45,7 +45,7 @@ Wire responses and client parsing: [API event examples](api-events.md).
 | `GET /api/ocr/jobs/{id}` | task snapshot + statistics |
 | `GET /api/ocr/jobs/{id}/events` | SSE replay/live events; `Last-Event-ID` |
 | `GET /api/ocr/jobs/{id}/download` | repeatable ZIP until expiry |
-| `GET /api/health` | application liveness, no Ollama call |
+| `GET /api/health` | application liveness, no backend call |
 
 - CLI exits: 0 complete, 2 partial, 1 failed/interrupted.
 - Blocking errors: input 400, backend/output 502, timeout 504, infrastructure 500.
@@ -67,8 +67,12 @@ Wire responses and client parsing: [API event examples](api-events.md).
   background, RGB PNG. Multi-frame raster images remain unsupported.
 - PDF pages render individually at `scale=pdf_dpi/72`, RGB on white, respecting
   rotation. Invalid/empty/locked PDFs fail inspection.
-- `load_settings`: repository-root config independent of cwd; required Ollama
-  URL/model/timeout; pipeline defaults are positive integers.
+- `load_settings`: repository-root config independent of cwd; selected provider's
+  URL/model/timeout required; pipeline defaults are positive integers.
+  `OCRSettings` replaces the Ollama-specific type; `OllamaSettings` remains an alias.
+- `create_ocr_client`: `ollama` -> SDK generate; `openailike` -> llama.cpp chat
+  completions with image data URL then prompt. Omitted provider defaults to Ollama.
+  Configuration and HTTP contracts: [OCR providers](providers.md).
 - `recognize`: grounding Markdown prompt, one image, `stream=False`; raw response
   text preserved. No startup inference/model download or automatic retry.
 - `build_document`: ordered grounded blocks; normalized 0–999 coordinates,

@@ -18,6 +18,7 @@ from app.document import build_document
 from app.export import archive_document, export_document
 from app.ollama_client import OllamaOCRClient
 from test_document import color_image, FIXTURE
+from provider_helpers import select_provider
 
 
 def zipped_files(data):
@@ -31,6 +32,7 @@ def zipped_files(data):
 
 class ExportTests(unittest.TestCase):
     def setUp(self):
+        select_provider(self)
         self.image = color_image((1000, 1200))
         self.text = FIXTURE.read_text()
         self.document = build_document(self.text, self.image)

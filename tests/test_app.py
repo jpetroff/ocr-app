@@ -18,6 +18,7 @@ from app.errors import OCRBackendError, OCRInputError, OCROutputError, OCRTimeou
 from app.ollama_client import OllamaOCRClient
 from app.service import OCRService, create_service
 from test_processing import encoded_image
+from provider_helpers import select_provider
 
 
 class ConfigTests(unittest.TestCase):
@@ -81,6 +82,9 @@ class ServiceTests(unittest.TestCase):
 
 
 class AdapterTests(unittest.TestCase):
+    def setUp(self):
+        select_provider(self)
+
     def test_cli_and_api_export_identical_plain_markdown(self):
         with tempfile.TemporaryDirectory() as directory, TestClient(app) as client:
             path = Path(directory) / "input.png"

@@ -4,15 +4,15 @@ from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
 from typing import BinaryIO
 
-from .config import OllamaSettings
+from .config import OCRSettings
 from .document import OCRDocument, build_document
-from .ollama_client import OllamaOCRClient
+from .ocr_client import OCRClient, create_ocr_client
 from .processing import prepare_image
 from .pipeline import Pipeline
 
 
 @asynccontextmanager
-async def create_pipeline(settings: OllamaSettings):
+async def create_pipeline(settings: OCRSettings):
     pipeline = Pipeline(settings)
     try:
         yield pipeline
@@ -21,7 +21,7 @@ async def create_pipeline(settings: OllamaSettings):
 
 
 class OCRService:
-    def __init__(self, client: OllamaOCRClient) -> None:
+    def __init__(self, client: OCRClient) -> None:
         self.client = client
 
     def ocr(self, file: BinaryIO, filename: str) -> OCRDocument:
@@ -31,8 +31,8 @@ class OCRService:
 
 
 @contextmanager
-def create_service(settings: OllamaSettings) -> Iterator[OCRService]:
-    client = OllamaOCRClient(settings)
+def create_service(settings: OCRSettings) -> Iterator[OCRService]:
+    client = create_ocr_client(settings)
     try:
         yield OCRService(client)
     finally:

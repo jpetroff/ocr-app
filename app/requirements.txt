@@ -3,6 +3,7 @@ uvicorn[standard]
 python-multipart
 PyYAML
 ollama
+httpx
 Pillow
 pillow-heif
 pypdfium2

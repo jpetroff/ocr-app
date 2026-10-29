@@ -8,11 +8,13 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import Field
 from starlette.types import Receive, Scope, Send
 
 from .config import load_settings
 from .errors import OCRBackendError, OCRInputError, OCRTimeoutError
 from .pipeline import Job, Pipeline
+from .page_selection import PageRange, PageSelection
 from .service import create_pipeline
 
 
@@ -28,6 +30,19 @@ app = FastAPI(title="Document OCR", lifespan=lifespan)
 
 def get_service(request: Request) -> Pipeline:
     return request.app.state.ocr_service
+
+
+PageNumber = Annotated[int, Field(gt=0)]
+
+
+def api_page_selection(include, exclude) -> PageSelection:
+    try:
+        return PageSelection(
+            include=tuple(PageRange(page, page) for page in include) if include is not None else None,
+            exclude=tuple(PageRange(page, page) for page in exclude) if exclude is not None else None,
+        )
+    except OCRInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/health")
@@ -62,11 +77,14 @@ async def ocr(
     file: UploadFile,
     service: Annotated[Pipeline, Depends(get_service)],
     pdf_dpi: Annotated[int | None, Form(gt=0)] = None,
+    include: Annotated[list[PageNumber] | None, Form(description="Pages to include (repeat field); exclusive with exclude.")] = None,
+    exclude: Annotated[list[PageNumber] | None, Form(description="Pages to exclude (repeat field); exclusive with include.")] = None,
 ) -> FileResponse:
+    selection = api_page_selection(include, exclude)
     job = None
     transferred = False
     try:
-        job = await service.submit(file.file, file.filename or "upload", pdf_dpi)
+        job = await service.submit(file.file, file.filename or "upload", pdf_dpi, page_selection=selection)
         await job.done.wait()
         if job.error:
             raise job.error
@@ -132,8 +150,11 @@ async def stream_ocr(
     file: UploadFile,
     service: Annotated[Pipeline, Depends(get_service)],
     pdf_dpi: Annotated[int | None, Form(gt=0)] = None,
+    include: Annotated[list[PageNumber] | None, Form(description="Pages to include (repeat field); exclusive with exclude.")] = None,
+    exclude: Annotated[list[PageNumber] | None, Form(description="Pages to exclude (repeat field); exclusive with include.")] = None,
 ):
-    job = await service.submit(file.file, file.filename or "upload", pdf_dpi)
+    selection = api_page_selection(include, exclude)
+    job = await service.submit(file.file, file.filename or "upload", pdf_dpi, page_selection=selection)
     # The coordinator, not this generator, owns the execution and upload copy.
     return event_response(service, job)
 
